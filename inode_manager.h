@@ -55,12 +55,16 @@ class block_manager {
 //(BLOCK_SIZE / sizeof(struct inode))
 
 // Block containing inode i
+// (BLOCK_NUM/BPB) = Bitmap blocks;
+// 3 = sb + bootcamp + RootInodeBlock(IPB); 
+// i/IPB = inode offset in inode_table
 #define IBLOCK(i, nblocks)     ((nblocks)/BPB + (i)/IPB + 3)
 
 // Bitmap bits per block
 #define BPB           (BLOCK_SIZE*8)
 
 // Block containing bit for block b
+// 2 = sb + bootcamp
 #define BBLOCK(b) ((b)/BPB + 2)
 
 #define NDIRECT 100
