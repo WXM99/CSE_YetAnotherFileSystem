@@ -212,6 +212,8 @@ inode_manager::alloc_inode(uint32_t type)
       char inode_block[BLOCK_SIZE];
       memcpy(inode_block, tmp_inodep, sizeof(inode));
       bm->write_block(inode_blockid, inode_block);
+      // todo: delete the underline to change the score
+      bm->write_block(inode_bitmap_blockid, bitmap_block);
       return i;
     }
   }
@@ -227,8 +229,16 @@ inode_manager::free_inode(uint32_t inum)
    * note: you need to check if the inode is already a freed one;
    * if not, clear it, and remember to write back to disk.
    */
-
-  return;
+  blockid_t inode_blockid = IBLOCK(inum, BLOCK_NUM);
+  blockid_t inode_bitmap_blockid = BBLOCK(inode_blockid);
+  char bitmap_block[BLOCK_SIZE];
+  bm->read_block(inode_bitmap_blockid, bitmap_block);
+  bool is_free_block = bitmap_block_manager(inode_blockid, bitmap_block, 'c');
+  if(is_free_block) {
+    return;
+  }
+  bitmap_block_manager(inode_blockid, bitmap_block, 'f');
+  bm->write_block(inode_bitmap_blockid, bitmap_block);
 }
 
 
@@ -279,6 +289,10 @@ inode_manager::put_inode(uint32_t inum, struct inode *ino)
 }
 
 #define MIN(a,b) ((a)<(b) ? (a) : (b))
+typedef struct block_entity {
+  char content[BLOCK_SIZE];
+} block_entity_t;
+
 
 /* Get all the data of a file by inum. 
  * Return alloced data, should be freed by caller. */
@@ -290,11 +304,53 @@ inode_manager::read_file(uint32_t inum, char **buf_out, int *size)
    * note: read blocks related to inode number inum,
    * and copy them to buf_Out
    */
-  
+  struct inode *tar_inode = get_inode(inum);
+  unsigned int file_size = tar_inode->size;
+  unsigned int read_size = MIN(file_size, *((unsigned int*)size));
+  block_entity_t *buf_in_block = (block_entity_t*) *buf_out;
+  if (read_size > MAXFILE) {
+    printf("\tim: error! read file size(%d) is too large\n", read_size);
+    free(tar_inode);
+    exit(0);
+  }
+  char tmp_block[BLOCK_SIZE];
+  // cpy the whole direct block
+  unsigned int direct_block_num = MIN(read_size, NDIRECT * BLOCK_SIZE)/BLOCK_SIZE;
+  for (unsigned int i = 0; i < direct_block_num; i++) {
+    blockid_t tmp_direct_blockid = tar_inode->blocks[i];
+    bm->read_block(tmp_direct_blockid, tmp_block);
+    memcpy( buf_in_block + i, tmp_block, BLOCK_SIZE); 
+  }
+  // cpy rest bytes in direct block
+  unsigned int rest_byte_num = read_size % BLOCK_SIZE;
+  if (direct_block_num < NDIRECT && rest_byte_num > 0) {
+    bm->read_block(direct_block_num, tmp_block);
+    memcpy(buf_in_block + direct_block_num, tmp_block, rest_byte_num);
+  }
+  // cpy in indirect block
+  if (read_size > NDIRECT * BLOCK_SIZE) {
+    blockid_t indirect_blockid = tar_inode->blocks[NDIRECT];
+    char indirect_block[BLOCK_SIZE];
+    bm->read_block(indirect_blockid, indirect_block);
+    unsigned int over_bytes = read_size - (NDIRECT * BLOCK_SIZE);
+    unsigned int over_block_num = over_bytes / BLOCK_SIZE;
+    unsigned int rest_byte_num = over_bytes % BLOCK_SIZE;
+    blockid_t *data_blockid = (blockid_t *) indirect_block;
+    for (unsigned int i = 0; i < over_block_num; i++) {
+      bm->read_block(data_blockid[i], tmp_block);
+      memcpy( buf_in_block + NDIRECT + i, tmp_block, BLOCK_SIZE);
+    }
+    if (rest_byte_num > 0) {
+      bm->read_block(data_blockid[over_block_num], tmp_block);
+      memcpy( buf_in_block + NDIRECT + over_block_num, tmp_block, rest_byte_num);
+    }
+  }
+  free(tar_inode);
   return;
 }
 
 /* alloc/free blocks if needed */
+#define USED_INDIR(block_nums) (block_nums > NDIRECT)
 void
 inode_manager::write_file(uint32_t inum, const char *buf, int size)
 {
@@ -304,6 +360,103 @@ inode_manager::write_file(uint32_t inum, const char *buf, int size)
    * you need to consider the situation when the size of buf 
    * is larger or smaller than the size of original inode
    */
+  if (size < 0 || size > (int)(MAXFILE*BLOCK_SIZE)) {
+    printf("\tim: error! invalid size: %d\n", size);
+    exit(0);
+  }
+
+  unsigned int whole_block_num = size / BLOCK_SIZE;
+  unsigned int rest_byte_num = size % BLOCK_SIZE;
+  unsigned int real_block_num = whole_block_num + (rest_byte_num > 0 ? 1 : 0);
+
+  struct inode *tar_inode = get_inode(inum);
+  unsigned int ori_size = tar_inode->size;
+  unsigned int ori_block_num = (ori_size / BLOCK_SIZE) + ((ori_size % BLOCK_SIZE) > 0 ? 1 : 0);
+
+  unsigned int overwrite_block_num = MIN(ori_block_num , real_block_num);
+
+  // both old and new files' sizes are within 100 blk;
+  if (!USED_INDIR(real_block_num) && !USED_INDIR(ori_block_num)) {
+    // overwrite the overlapped blks;
+    for (unsigned int i = 0; i < overwrite_block_num; i++) {
+      blockid_t tmp_blockid = tar_inode->blocks[i];
+      block_entity_t* buf_in_block = (block_entity_t*) buf;
+      bm->write_block(tmp_blockid, (char*) (buf_in_block + i));
+    }
+    // new file is shorter, free the redundant blks.
+    if (real_block_num <= ori_block_num) {
+      for (unsigned int i = real_block_num; i < ori_block_num; i++) {
+        blockid_t tmp_blockid = tar_inode->blocks[i];
+        bm->free_block(tmp_blockid);
+      }
+    } 
+    // old file is shorter, alloc more blks and fill them.
+    else {
+      block_entity_t* buf_in_block = (block_entity_t*) buf;
+      for (unsigned int i = ori_block_num; i < real_block_num; i++) {
+        blockid_t tmp_blockid = bm->alloc_block();
+        bm->write_block(tmp_blockid, (char*) (buf_in_block + i));
+        tar_inode->blocks[i] = tmp_blockid;
+      }
+    }
+  }
+  // new fill is fewer than 100 blk yet old one is larger than 100 blk
+  else if (!USED_INDIR(real_block_num) && USED_INDIR(ori_block_num)) {
+    // overwrite the overlapped blks;
+    for (unsigned int i = 0; i < overwrite_block_num; i++) {
+      blockid_t tmp_blockid = tar_inode->blocks[i];
+      block_entity_t* buf_in_block = (block_entity_t*) buf;
+      bm->write_block(tmp_blockid, (char*) (buf_in_block + i));
+    }
+    // free the redundant blks.
+      // free direct blocks
+    for (unsigned int i = real_block_num; i < NDIRECT; i++) {
+      blockid_t tmp_blockid = tar_inode->blocks[i];
+      bm->free_block(tmp_blockid);
+    }
+      // free indirect blocks
+    blockid_t indirect_blockid = tar_inode->blocks[NDIRECT];
+    char indirect_block[BLOCK_SIZE];
+    bm->read_block(indirect_blockid, indirect_block);
+    unsigned int over_block_num = ori_block_num - real_block_num;
+    blockid_t *data_blockid = (blockid_t*) indirect_block; 
+    for (unsigned int i = 0; i <over_block_num; i++) {
+      bm->free_block(data_blockid[i]);
+    }
+  }
+  // new fill is larger than 100 blk yet old one is fewer 
+  else if (USED_INDIR(real_block_num) && !USED_INDIR(ori_block_num)) {
+    // overwrite the overlapped blks;
+    for (unsigned int i = 0; i < overwrite_block_num; i++) {
+      blockid_t tmp_blockid = tar_inode->blocks[i];
+      block_entity_t* buf_in_block = (block_entity_t*) buf;
+      bm->write_block(tmp_blockid, (char*) (buf_in_block + i));
+    }
+    // alloc more blks
+      // alloc all direct blks
+      // alloc indirect blks
+      // todo:
+  } 
+  // both new fill and the old one are larger than 100 blk
+  else {
+    // overwrite the *100* overlapped blks;
+    for (unsigned int i = 0; i < overwrite_block_num; i++) {
+      blockid_t tmp_blockid = tar_inode->blocks[i];
+      block_entity_t* buf_in_block = (block_entity_t*) buf;
+      bm->write_block(tmp_blockid, (char*) (buf_in_block + i));
+    }
+    // overwrite moreover indirect overlapped blks;
+    // new file smaller, free indirect blks
+    if (real_block_num <= ori_block_num) {
+    }
+    // old file smaller, alloc indirect blks
+    else {
+    }
+  }
+  tar_inode->size = size;
+  put_inode(inum, tar_inode); 
+  
+  free(tar_inode);
   
   return;
 }
@@ -335,6 +488,13 @@ inode_manager::remove_file(uint32_t inum)
    * your code goes here
    * note: you need to consider about both the data block and inode of the file
    */
-  
+  struct inode *tar_inode = get_inode(inum);
+  unsigned int size = tar_inode->size;
+  unsigned int block_num = (size / BLOCK_SIZE) + ((size % BLOCK_SIZE) > 0 ? 1 : 0);
+  blockid_t* blocks = tar_inode->blocks;
+  for (unsigned int  i = 0; i < block_num; i++) {
+    bm->free_block(blocks[i]);
+  }
+  free_inode(inum);
   return;
 }
