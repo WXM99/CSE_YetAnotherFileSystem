@@ -209,10 +209,7 @@ inode_manager::alloc_inode(uint32_t type)
       tmp_inodep->type = type;
       tmp_inodep->size = 0;
       tmp_inodep->atime = time(NULL);
-      char inode_block[BLOCK_SIZE];
-      memcpy(inode_block, tmp_inodep, sizeof(inode));
-      bm->write_block(inode_blockid, inode_block);
-      // todo: delete the underline to change the score
+      bm->write_block(inode_blockid, (char*)tmp_inodep);
       bm->write_block(inode_bitmap_blockid, bitmap_block);
       return i;
     }
@@ -237,8 +234,13 @@ inode_manager::free_inode(uint32_t inum)
   if(is_free_block) {
     return;
   }
+  // free a bit in bit map
   bitmap_block_manager(inode_blockid, bitmap_block, 'f');
   bm->write_block(inode_bitmap_blockid, bitmap_block);
+  // free inode in inode table
+  inode free_inode[1];
+  free_inode -> type = 0;
+  bm->write_block(inode_blockid, (char*)free_inode);
 }
 
 
