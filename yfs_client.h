@@ -6,6 +6,7 @@
 #include "extent_client.h"
 #include <vector>
 
+#define MAX_FILENAME_LENGTH 64
 
 class yfs_client {
   extent_client *ec;
@@ -29,6 +30,10 @@ class yfs_client {
   struct dirent {
     std::string name;
     yfs_client::inum inum;
+  };
+  struct diy_dirent {
+    yfs_client::inum inum;
+    char name[MAX_FILENAME_LENGTH];
   };
 
  private:

@@ -66,7 +66,20 @@ bool
 yfs_client::isdir(inum inum)
 {
     // Oops! is this still correct when you implement symlink?
-    return ! isfile(inum);
+    // return ! isfile(inum);
+    extent_protocol::attr a;
+
+    if (ec->getattr(inum, a) != extent_protocol::OK) {
+        printf("error getting attr\n");
+        return false;
+    }
+
+    if (a.type == extent_protocol::T_DIR) {
+        printf("isfile: %lld is a file\n", inum);
+        return true;
+    } 
+    printf("isfile: %lld is a dir\n", inum);
+    return false;
 }
 
 int
@@ -173,6 +186,23 @@ yfs_client::lookup(inum parent, const char *name, bool &found, inum &ino_out)
      * you should design the format of directory content.
      */
 
+    std::list<dirent> dirents;
+    readdir(parent, dirents);
+
+    std::string filename;
+    filename.assign(name, strlen(name));
+
+    while (!dirents.empty()) {
+        dirent tmp_entry = dirents.front();
+        dirents.pop_front();
+        if (tmp_entry.name == filename) {
+            found = true;
+            ino_out = tmp_entry.inum;
+            return r;
+        }
+    }
+
+    found = false;
     return r;
 }
 
@@ -187,6 +217,27 @@ yfs_client::readdir(inum dir, std::list<dirent> &list)
      * and push the dirents to the list.
      */
 
+    std::string buf;
+    if (ec->get(dir, buf) != extent_protocol::OK) {
+        printf("\tyc: error! extent_client can't get content of inum: %d\n", (unsigned int)dir);
+        exit(0);
+    }
+    extent_protocol::attr attr;
+    ec->getattr(dir, attr);
+    if (attr.type != extent_protocol::T_DIR) {
+        printf("\tyc: error! invalid call of readdir of a NON_DIR file: %d\n", (unsigned int)dir);
+        exit(0);
+    }
+
+    unsigned int entry_num = buf.size() / (sizeof(diy_dirent));
+    for (unsigned int i = 0; i < entry_num; i++) {
+        diy_dirent diy_tmp_entry;
+        memcpy(&diy_tmp_entry, ((diy_dirent*)buf.c_str())+i, sizeof(diy_dirent));
+        dirent tmp_entry;
+        tmp_entry.inum = diy_tmp_entry.inum;
+        tmp_entry.name.assign(diy_tmp_entry.name, strlen(diy_tmp_entry.name));
+        list.push_back(tmp_entry);
+    }
     return r;
 }
 
