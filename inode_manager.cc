@@ -306,16 +306,19 @@ inode_manager::read_file(uint32_t inum, char **buf_out, int *size)
    */
   struct inode *tar_inode = get_inode(inum);
   unsigned int file_size = tar_inode->size;
-  unsigned int read_size = MIN(file_size, *((unsigned int*)size));
-  block_entity_t *buf_in_block = (block_entity_t*) *buf_out;
-  if (read_size > MAXFILE) {
+  unsigned int read_size = MIN(file_size, MAXFILE*BLOCK_SIZE);
+  *size = read_size;
+  unsigned int read_block_num = read_size / BLOCK_SIZE + ((read_size % BLOCK_SIZE) > 0 ? 1:0);
+  block_entity_t *buf_in_block = (block_entity_t*) malloc(read_block_num * BLOCK_SIZE);
+
+  if (read_size > MAXFILE*BLOCK_SIZE) {
     printf("\tim: error! read file size(%d) is too large\n", read_size);
     free(tar_inode);
     exit(0);
   }
   char tmp_block[BLOCK_SIZE];
   // cpy the whole direct block
-  unsigned int direct_block_num = MIN(read_size, NDIRECT * BLOCK_SIZE)/BLOCK_SIZE;
+  unsigned int direct_block_num = MIN(read_block_num, NDIRECT);
   for (unsigned int i = 0; i < direct_block_num; i++) {
     blockid_t tmp_direct_blockid = tar_inode->blocks[i];
     bm->read_block(tmp_direct_blockid, tmp_block);
@@ -325,7 +328,7 @@ inode_manager::read_file(uint32_t inum, char **buf_out, int *size)
   unsigned int rest_byte_num = read_size % BLOCK_SIZE;
   if (direct_block_num < NDIRECT && rest_byte_num > 0) {
     bm->read_block(direct_block_num, tmp_block);
-    memcpy(buf_in_block + direct_block_num, tmp_block, rest_byte_num);
+    memcpy( buf_in_block + direct_block_num, tmp_block, rest_byte_num);
   }
   // cpy in indirect block
   if (read_size > NDIRECT * BLOCK_SIZE) {
@@ -346,6 +349,7 @@ inode_manager::read_file(uint32_t inum, char **buf_out, int *size)
     }
   }
   free(tar_inode);
+  *buf_out = (char*) buf_in_block;
   return;
 }
 
@@ -374,13 +378,13 @@ inode_manager::write_file(uint32_t inum, const char *buf, int size)
   unsigned int ori_block_num = (ori_size / BLOCK_SIZE) + ((ori_size % BLOCK_SIZE) > 0 ? 1 : 0);
 
   unsigned int overwrite_block_num = MIN(ori_block_num , real_block_num);
-
+  const block_entity_t* buf_in_block = (block_entity_t*) buf;
+  
   // both old and new files' sizes are within 100 blk;
   if (!USED_INDIR(real_block_num) && !USED_INDIR(ori_block_num)) {
     // overwrite the overlapped blks;
     for (unsigned int i = 0; i < overwrite_block_num; i++) {
       blockid_t tmp_blockid = tar_inode->blocks[i];
-      block_entity_t* buf_in_block = (block_entity_t*) buf;
       bm->write_block(tmp_blockid, (char*) (buf_in_block + i));
     }
     // new file is shorter, free the redundant blks.
@@ -392,20 +396,21 @@ inode_manager::write_file(uint32_t inum, const char *buf, int size)
     } 
     // old file is shorter, alloc more blks and fill them.
     else {
-      block_entity_t* buf_in_block = (block_entity_t*) buf;
       for (unsigned int i = ori_block_num; i < real_block_num; i++) {
         blockid_t tmp_blockid = bm->alloc_block();
         bm->write_block(tmp_blockid, (char*) (buf_in_block + i));
         tar_inode->blocks[i] = tmp_blockid;
+        char test_read[BLOCK_SIZE];
+        bm->read_block(tmp_blockid, test_read);
       }
     }
   }
+
   // new fill is fewer than 100 blk yet old one is larger than 100 blk
   else if (!USED_INDIR(real_block_num) && USED_INDIR(ori_block_num)) {
     // overwrite the overlapped blks;
     for (unsigned int i = 0; i < overwrite_block_num; i++) {
       blockid_t tmp_blockid = tar_inode->blocks[i];
-      block_entity_t* buf_in_block = (block_entity_t*) buf;
       bm->write_block(tmp_blockid, (char*) (buf_in_block + i));
     }
     // free the redundant blks.
@@ -429,35 +434,61 @@ inode_manager::write_file(uint32_t inum, const char *buf, int size)
     // overwrite the overlapped blks;
     for (unsigned int i = 0; i < overwrite_block_num; i++) {
       blockid_t tmp_blockid = tar_inode->blocks[i];
-      block_entity_t* buf_in_block = (block_entity_t*) buf;
       bm->write_block(tmp_blockid, (char*) (buf_in_block + i));
     }
     // alloc more blks
       // alloc all direct blks
+      for (unsigned int i = overwrite_block_num; i < NDIRECT; i++) {
+        blockid_t tmp_blockid = bm->alloc_block();
+        bm->write_block(tmp_blockid, (char*) (buf_in_block + i));
+        tar_inode->blocks[i] = tmp_blockid;
+      }
       // alloc indirect blks
-      // todo:
+      blockid_t indirect_blockid = bm->alloc_block();
+      tar_inode->blocks[NDIRECT] = indirect_blockid;
+      blockid_t data_blockids[NINDIRECT];
+      for (unsigned int i = NDIRECT; i < real_block_num; i++)
+      {
+        blockid_t data_blockid = bm->alloc_block();
+        data_blockids[i-NDIRECT] = data_blockid;
+        bm->write_block(data_blockid, (char*) (buf_in_block + i));
+      }
+      bm->write_block(indirect_blockid, (char*) data_blockids);
   } 
   // both new fill and the old one are larger than 100 blk
   else {
     // overwrite the *100* overlapped blks;
-    for (unsigned int i = 0; i < overwrite_block_num; i++) {
+    for (unsigned int i = 0; i < NDIRECT; i++) {
       blockid_t tmp_blockid = tar_inode->blocks[i];
-      block_entity_t* buf_in_block = (block_entity_t*) buf;
       bm->write_block(tmp_blockid, (char*) (buf_in_block + i));
     }
     // overwrite moreover indirect overlapped blks;
+    blockid_t data_blockid[NINDIRECT];
+    bm->read_block(tar_inode->blocks[NDIRECT], (char*) data_blockid);
+    for (unsigned int i = NDIRECT; i < overwrite_block_num; i++) {
+      blockid_t tmp_blockid = data_blockid[i-NDIRECT];
+      bm->write_block(tmp_blockid, (char*) (buf_in_block + i));
+    }
     // new file smaller, free indirect blks
     if (real_block_num <= ori_block_num) {
+      for (unsigned int i = real_block_num; i < ori_block_num; i++) {
+        blockid_t free_blockid = data_blockid[i-NDIRECT];
+        bm->free_block(free_blockid);
+      }
     }
     // old file smaller, alloc indirect blks
     else {
+      for (unsigned int i = ori_block_num; i < real_block_num; i++) {
+        blockid_t alloc_blockid = bm->alloc_block();
+        bm->write_block(alloc_blockid, (char*) (buf_in_block+i));
+        data_blockid[i-NDIRECT] = alloc_blockid;
+      }
+      bm->write_block(tar_inode->blocks[NDIRECT], (char*) data_blockid);
     }
   }
   tar_inode->size = size;
   put_inode(inum, tar_inode); 
-  
   free(tar_inode);
-  
   return;
 }
 
