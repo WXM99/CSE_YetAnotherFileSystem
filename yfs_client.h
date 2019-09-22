@@ -34,6 +34,7 @@ class yfs_client {
   struct diy_dirent {
     yfs_client::inum inum;
     char name[MAX_FILENAME_LENGTH];
+    unsigned short name_length;
   };
 
  private:
@@ -58,8 +59,12 @@ class yfs_client {
   int read(inum, size_t, off_t, std::string &);
   int unlink(inum,const char *);
   int mkdir(inum , const char *, mode_t , inum &);
+  int rmdir(inum, const char *);
   
   /** you may need to add symbolic link related methods here.*/
+  bool issymlink(inum);
+  int symlink(inum parent, const char *name, const char *link, inum &ino_out);
+  int readlink(inum ino, std::string &data);
 };
 
 #endif 

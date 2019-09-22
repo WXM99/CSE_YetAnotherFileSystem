@@ -85,6 +85,12 @@ class inode_manager {
   block_manager *bm;
   struct inode* get_inode(uint32_t inum);
   void put_inode(uint32_t inum, struct inode *ino);
+  // helpers
+  blockid_t get_blockid_in_inode(struct inode *ino, uint32_t index);
+  void read_block_in_inode(struct inode *ino, uint32_t index, std::string &buf);
+  void write_block_in_inode(struct inode *ino, uint32_t index, std::string &buf);
+  void alloc_block_in_inode(struct inode *ino, uint32_t index, std::string &buf, bool write_through);
+  void free_block_in_inode(struct inode *ino, uint32_t index);
 
  public:
   inode_manager();
