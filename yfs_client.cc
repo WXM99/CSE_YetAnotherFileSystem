@@ -158,6 +158,29 @@ yfs_client::create(inum parent, const char *name, mode_t mode, inum &ino_out)
      * after create file or dir, you must remember to modify the parent infomation.
      */
 
+    bool found;
+    lookup(parent, name, found, ino_out);
+    if (found) {
+        return EXIST;
+    }
+
+    ec->create(extent_protocol::T_FILE, ino_out);
+    diy_dirent new_entry;
+    new_entry.inum = ino_out;
+    memcpy(new_entry.name, name, strlen(name));
+
+    std::string buf, new_entry_str;
+    new_entry_str.assign((char*)(&new_entry), sizeof(diy_dirent));
+    if (ec->get(parent, buf) != extent_protocol::OK) {
+        printf("\tyc: error! can't get parent: %lld\n", parent);
+        exit(0);
+    }
+    buf.append(new_entry_str);
+    if (ec->put(parent, buf) != extent_protocol::OK) {
+        printf("\tyc: error! can't append new entry(%lld) to parent\n", ino_out);
+        exit(0);
+    }
+    printf("\tyc: new entry(%lld - %s)\n", ino_out, name);
     return r;
 }
 

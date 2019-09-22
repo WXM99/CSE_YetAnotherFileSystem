@@ -1,2 +1,5 @@
 
 .vscode
+*.log
+core
+yfs1
