@@ -45,6 +45,8 @@ class yfs_client {
  private:
   static std::string filename(inum);
   static inum n2i(std::string);
+  int lookup_no_seria(inum parent, const char *name, bool &found, inum &ino_out);
+  int readdir_no_seria(inum dir, std::list<dirent> &list);
 
  public:
   yfs_client(std::string, std::string);
