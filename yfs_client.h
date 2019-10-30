@@ -10,6 +10,7 @@
 #include "extent_client.h"
 #include <vector>
 
+#define MAX_FILENAME_LENGTH 64
 
 class yfs_client {
   extent_client *ec;
@@ -35,10 +36,17 @@ class yfs_client {
     std::string name;
     yfs_client::inum inum;
   };
+  struct diy_dirent {
+    yfs_client::inum inum;
+    char name[MAX_FILENAME_LENGTH];
+    unsigned short name_length;
+  };
 
  private:
   static std::string filename(inum);
   static inum n2i(std::string);
+  int lookup_no_seria(inum parent, const char *name, bool &found, inum &ino_out);
+  int readdir_no_seria(inum dir, std::list<dirent> &list);
 
  public:
   yfs_client(std::string, std::string);
@@ -57,8 +65,12 @@ class yfs_client {
   int read(inum, size_t, off_t, std::string &);
   int unlink(inum,const char *);
   int mkdir(inum , const char *, mode_t , inum &);
+  int rmdir(inum, const char *);
   
   /** you may need to add symbolic link related methods here.*/
+  bool issymlink(inum);
+  int symlink(inum parent, const char *name, const char *link, inum &ino_out);
+  int readlink(inum ino, std::string &data);
 };
 
 #endif 
