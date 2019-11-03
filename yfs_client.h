@@ -9,6 +9,7 @@
 //#include "yfs_protocol.h"
 #include "extent_client.h"
 #include <vector>
+#include "lock_client_cache.h"
 
 #define MAX_FILENAME_LENGTH 64
 
