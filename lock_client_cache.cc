@@ -124,9 +124,9 @@ lock_client_cache::acquire(lock_protocol::lockid_t lid)
       case releasing: {
         // todo: should have called rpc_acquire() but to reduce calling
         pthread_cond_wait(cond, &threads_mutex);
-        // return rpc_acquire(lid, lock, cond);
-        pthread_mutex_unlock(&threads_mutex);
-        return ret;
+        return rpc_acquire(lid, lock, cond);
+        // pthread_mutex_unlock(&threads_mutex);
+        // return ret;
       }
       default: {
         return lock_protocol::NOENT;
