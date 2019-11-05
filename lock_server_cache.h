@@ -9,7 +9,7 @@
 #include "rpc.h"
 #include "lock_server.h"
 #include <pthread.h>
-#include <deque>
+#include <set>
 
 
 class lock_server_cache {
@@ -26,7 +26,7 @@ class lock_server_cache {
     server_states_t server_state;
     std::string client_holding;
     std::string client_retrying;
-    std::deque<std::string> clients_queue;
+    std::set<std::string> clients_queue;
   };
   typedef server_lock* server_lock_p;
   std::map<lock_protocol::lockid_t, server_lock_p> lock_manager;

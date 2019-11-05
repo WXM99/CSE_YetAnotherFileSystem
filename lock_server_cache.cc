@@ -36,13 +36,13 @@ int lock_server_cache::acquire(lock_protocol::lockid_t lid, std::string id,
     }
     case locked: {
       lock->server_state = revoking;
-      lock->clients_queue.push_back(id);
+      lock->clients_queue.insert(id);
       pthread_mutex_unlock(&clients_mutex);
       handle(lock->client_holding).safebind()->call(rlock_protocol::revoke, lid, r);
       return lock_protocol::RETRY;
     }
     case revoking: {
-      lock->clients_queue.push_back(id);
+      lock->clients_queue.insert(id);
       pthread_mutex_unlock(&clients_mutex);
       return lock_protocol::RETRY;
     }
@@ -65,7 +65,7 @@ int lock_server_cache::acquire(lock_protocol::lockid_t lid, std::string id,
       }
       // other clients acquire
       else {
-        lock->clients_queue.push_back(id);
+        lock->clients_queue.insert(id);
         pthread_mutex_unlock(&clients_mutex);
         return lock_protocol::RETRY;
       }
@@ -87,11 +87,9 @@ lock_server_cache::release(lock_protocol::lockid_t lid, std::string id,
   server_lock_p lock = lock_manager[lid];
   lock->client_holding.clear();
   if (!lock->clients_queue.empty()) {
-    // std::set<std::string>::iterator next_client_p = lock->clients_queue.begin();
-    // std::string next_client = *(next_client_p);
-    // lock->clients_queue.erase(next_client_p);
-    std::string next_client = lock->clients_queue.front();
-    lock->clients_queue.pop_front();
+    std::set<std::string>::iterator next_client_p = lock->clients_queue.begin();
+    std::string next_client = *(next_client_p);
+    lock->clients_queue.erase(next_client_p);
     lock->client_retrying = next_client;
     lock->server_state = retrying;
     pthread_mutex_unlock(&clients_mutex);
