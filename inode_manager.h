@@ -55,12 +55,16 @@ class block_manager {
 //(BLOCK_SIZE / sizeof(struct inode))
 
 // Block containing inode i
+// (BLOCK_NUM/BPB) = Bitmap blocks;
+// 3 = sb + bootcamp + RootInodeBlock(IPB); 
+// i/IPB = inode offset in inode_table
 #define IBLOCK(i, nblocks)     ((nblocks)/BPB + (i)/IPB + 3)
 
 // Bitmap bits per block
 #define BPB           (BLOCK_SIZE*8)
 
 // Block containing bit for block b
+// 2 = sb + bootcamp
 #define BBLOCK(b) ((b)/BPB + 2)
 
 #define NDIRECT 100
@@ -81,6 +85,12 @@ class inode_manager {
   block_manager *bm;
   struct inode* get_inode(uint32_t inum);
   void put_inode(uint32_t inum, struct inode *ino);
+  // helpers
+  blockid_t get_blockid_in_inode(struct inode *ino, uint32_t index);
+  void read_block_in_inode(struct inode *ino, uint32_t index, std::string &buf);
+  void write_block_in_inode(struct inode *ino, uint32_t index, std::string &buf);
+  void alloc_block_in_inode(struct inode *ino, uint32_t index, std::string &buf, bool write_through);
+  void free_block_in_inode(struct inode *ino, uint32_t index);
 
  public:
   inode_manager();
