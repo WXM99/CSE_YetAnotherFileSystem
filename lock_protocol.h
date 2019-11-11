@@ -1,5 +1,4 @@
 // lock protocol
-// lab4
 
 #ifndef lock_protocol_h
 #define lock_protocol_h
@@ -8,7 +7,7 @@
 
 class lock_protocol {
  public:
-  enum xxstatus { OK, RETRY, RPCERR, NOENT, IOERR, OK_CACHED };
+  enum xxstatus { OK, RETRY, RPCERR, NOENT, IOERR };
   typedef int status;
   typedef unsigned long long lockid_t;
   enum rpc_numbers {
