@@ -12,6 +12,7 @@
 #include <pthread.h>
 #include <map>
 #include <deque>
+#include "extent_client.h"
 
 
 // Classes that inherit lock_release_user can override dorelease so that 
@@ -53,6 +54,7 @@ class lock_client_cache : public lock_client {
   lock_protocol::status rpc_acquire(lock_protocol::lockid_t, cached_lock_p, pthread_cond_t*);
   void xlock(lock_protocol::lockid_t, const char*);
  public:
+  extent_client* ec_handle;
   static int last_port;
   lock_client_cache(std::string xdst, class lock_release_user *l = 0);
   virtual ~lock_client_cache() {};

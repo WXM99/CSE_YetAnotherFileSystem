@@ -140,10 +140,7 @@ extent_client::sync(extent_protocol::extentid_t eid) {
     return ret;
   }
   file->buf_valid = false;
-  // todo: fix the magic number
-  if (file->buf.size() < 7 && file->buf.size() > 2) {
-    file->attr_valid = false;
-  }
+  file->attr_valid = false;
   
   return ret;
 }

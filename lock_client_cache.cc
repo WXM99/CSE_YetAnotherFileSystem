@@ -169,6 +169,7 @@ lock_client_cache::release(lock_protocol::lockid_t lid)
     lock->client_state = releasing;
     pthread_mutex_unlock(&threads_mutex);
     /* substantial release */
+    ec_handle->sync(lid);
     ret = cl->call(lock_protocol::release, lid, id, r);
     pthread_mutex_lock(&threads_mutex);
     lock->client_state = none;
@@ -203,6 +204,7 @@ lock_client_cache::revoke_handler(lock_protocol::lockid_t lid,
     lock->client_state = releasing;
     pthread_mutex_unlock(&threads_mutex);
     /* substantial release */
+    ec_handle->sync(lid);
     ret = cl->call(lock_protocol::release, lid, id, r);
     pthread_mutex_lock(&threads_mutex);
     // schedule to next thread in the queue if it has
