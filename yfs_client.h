@@ -48,6 +48,7 @@ class yfs_client {
   static inum n2i(std::string);
   int lookup_no_seria(inum parent, const char *name, bool &found, inum &ino_out);
   int readdir_no_seria(inum dir, std::list<dirent> &list);
+  void w_release(lock_protocol::lockid_t lid);
 
  public:
   yfs_client(std::string, std::string);
@@ -55,7 +56,7 @@ class yfs_client {
   bool isfile(inum);
   bool isdir(inum);
 
-  int getfile(inum, fileinfo &);
+  int getfile(inum, fileinfo &fin);
   int getdir(inum, dirinfo &);
 
   int setattr(inum, size_t);

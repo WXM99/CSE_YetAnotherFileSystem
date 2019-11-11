@@ -17,9 +17,16 @@ yfs_client::yfs_client(std::string extent_dst, std::string lock_dst)
   lc->acquire(1);
   if (ec->put(1, "") != extent_protocol::OK)
       printf("error init root dir\n"); // XYB: init root dir
-  lc->release(1);
+  w_release(1);
 }
 
+void 
+yfs_client::w_release(lock_protocol::lockid_t lid) {
+    lock_protocol::status rel_state = lc->release(1);
+    if (rel_state == lock_protocol::OK) {
+        ec->sync2server(lid);
+    }
+}
 
 yfs_client::inum
 yfs_client::n2i(std::string n)
@@ -45,11 +52,11 @@ yfs_client::isfile(inum inum)
 
     lc->acquire(inum);
     if (ec->getattr(inum, a) != extent_protocol::OK) {
-        lc->release(inum);
+        w_release(inum);
         printf("error getting attr\n");
         return false;
     }
-    lc->release(inum);
+    w_release(inum);
 
     if (a.type == extent_protocol::T_FILE) {
         printf("isfile: %lld is a file\n", inum);
@@ -70,11 +77,11 @@ yfs_client::issymlink(inum inum) {
 
     lc->acquire(inum);
     if (ec->getattr(inum, a) != extent_protocol::OK) {
-        lc->release(inum);
+        w_release(inum);
         printf("error getting attr\n");
         return false;
     }
-    lc->release(inum);
+    w_release(inum);
 
     if (a.type == extent_protocol::T_SLINK) {
         printf("isfile: %lld is a symlink\n", inum);
@@ -93,11 +100,11 @@ yfs_client::isdir(inum inum)
 
     lc->acquire(inum);
     if (ec->getattr(inum, a) != extent_protocol::OK) {
-        lc->release(inum);
+        w_release(inum);
         printf("error getting attr\n");
         return false;
     }
-    lc->release(inum);
+    w_release(inum);
 
     if (a.type == extent_protocol::T_DIR) {
         printf("isfile: %lld is a dir\n", inum);
@@ -119,7 +126,7 @@ yfs_client::getfile(inum inum, fileinfo &fin)
     if (ec->getattr(inum, a) != extent_protocol::OK) {
         r = IOERR;
     }
-    lc->release(inum);
+    w_release(inum);
 
     fin.atime = a.atime;
     fin.mtime = a.mtime;
@@ -141,7 +148,7 @@ yfs_client::getdir(inum inum, dirinfo &din)
     if (ec->getattr(inum, a) != extent_protocol::OK) {
         r = IOERR;
     }
-    lc->release(inum);
+    w_release(inum);
 
     din.atime = a.atime;
     din.mtime = a.mtime;
@@ -175,12 +182,12 @@ yfs_client::setattr(inum ino, size_t size)
     lc->acquire(ino);
     r = ec->get(ino, buf);
     if (r != OK) {
-        lc->release(ino);    
+        w_release(ino);    
         return r;
     }
     buf.resize(size);
     r = ec->put(ino, buf);
-    lc->release(ino);   
+    w_release(ino);   
 
     return r;
 }
@@ -201,14 +208,14 @@ yfs_client::create(inum parent, const char *name, mode_t mode, inum &ino_out)
     lc->acquire(parent);
     lookup_no_seria(parent, name, found, ino_out);
     if (found) {
-        lc->release(parent);
+        w_release(parent);
         return EXIST;
     }
 
     ec->create(extent_protocol::T_FILE, ino_out);
     std::string buf, new_entry_str;
     if (ec->get(parent, buf) != extent_protocol::OK) {
-        lc->release(parent);
+        w_release(parent);
         exit(0);
     }
     struct diy_dirent new_entry;
@@ -218,7 +225,7 @@ yfs_client::create(inum parent, const char *name, mode_t mode, inum &ino_out)
     new_entry_str.assign((char *) (&new_entry), sizeof(diy_dirent));
     buf.append(new_entry_str);
     ec->put(parent, buf);
-    lc->release(parent);
+    w_release(parent);
 
     return r;
 }
@@ -239,12 +246,12 @@ yfs_client::mkdir(inum parent, const char *name, mode_t mode, inum &ino_out)
     lc->acquire(parent);
     lookup_no_seria(parent, name, found, ino_out);
     if (found) {
-        lc->release(parent);
+        w_release(parent);
         return EXIST;
     }
     std::string buf, new_entry_str;
     if (ec->get(parent, buf) != extent_protocol::OK) {
-        lc->release(parent);
+        w_release(parent);
         exit(0);
     }
 
@@ -256,7 +263,7 @@ yfs_client::mkdir(inum parent, const char *name, mode_t mode, inum &ino_out)
     new_entry_str.assign((char *) (&new_entry), sizeof(diy_dirent));
     buf.append(new_entry_str);
     ec->put(parent, buf);
-    lc->release(parent);
+    w_release(parent);
 
     return r;
 }
@@ -292,7 +299,7 @@ yfs_client::lookup(inum parent, const char *name, bool &found, inum &ino_out)
 {
     lc->acquire(parent);
     int r = lookup_no_seria(parent, name, found, ino_out);
-    lc->release(parent);
+    w_release(parent);
 
     return r;
 }
@@ -335,7 +342,7 @@ yfs_client::readdir(inum dir, std::list<dirent> &list)
 {
     lc->acquire(dir);
     int r = readdir_no_seria(dir, list);
-    lc->release(dir);
+    w_release(dir);
 
     return r;
 }
@@ -353,7 +360,7 @@ yfs_client::read(inum ino, size_t size, off_t off, std::string &data)
 
     lc->acquire(ino);
     ec->get(ino, content);
-    lc->release(ino);
+    w_release(ino);
 
     if ((unsigned int) off >= content.size()) {
         data.erase();
@@ -392,7 +399,7 @@ yfs_client::write(inum ino, size_t size, off_t off, const char *data,
         bytes_written = size + off - old_size;
     }
     ec->put(ino, content);
-    lc->release(ino);
+    w_release(ino);
 
     return r;
 }
@@ -425,7 +432,7 @@ int yfs_client::rmdir(inum parent, const char *name)
         }
     }
     if (!found) {
-        lc->release(parent);
+        w_release(parent);
         return NOENT;
     }
     dir_entries.erase(it);
@@ -441,7 +448,7 @@ int yfs_client::rmdir(inum parent, const char *name)
     }
 
     ec->put(parent, buf);
-    lc->release(parent);
+    w_release(parent);
 
     return r;
 }
@@ -454,7 +461,7 @@ yfs_client::readlink(inum ino, std::string &data)
 
     lc->acquire(ino);
     r = ec->get(ino, buf);
-    lc->release(ino);
+    w_release(ino);
 
     data = buf;
     return r;
@@ -481,7 +488,7 @@ yfs_client::symlink(inum parent, const char *name, const char *link, inum &ino_o
     parent_add.assign((char *) (&sym_entry), sizeof(diy_dirent));
     parent_content += parent_add;
     ec->put(parent, parent_content);
-    lc->release(parent);
+    w_release(parent);
 
     return r;
 }

@@ -1,5 +1,6 @@
 // RPC stubs for clients to talk to lock_server, and cache the locks
 // see lock_client.cache.h for protocol details.
+// lab4
 
 #include "lock_client_cache.h"
 #include "rpc.h"
@@ -98,7 +99,7 @@ lock_client_cache::rpc_acquire(lock_protocol::lockid_t lid,
 lock_protocol::status
 lock_client_cache::acquire(lock_protocol::lockid_t lid)
 {
-  int ret = lock_protocol::OK;
+  int ret = lock_protocol::OK_CACHED;
   pthread_mutex_lock(&threads_mutex);
   cached_lock_p lock = lock_cache[lid];
   if (lock == NULL) {
@@ -187,7 +188,11 @@ lock_client_cache::release(lock_protocol::lockid_t lid)
     pthread_cond_signal(lock->threads_queue.front());
   }
   pthread_mutex_unlock(&threads_mutex);
-  return ret;
+  if (still_cached) {
+    return lock_protocol::OK_CACHED;
+  } else {
+    return ret;
+  }
 }
 
 rlock_protocol::status
