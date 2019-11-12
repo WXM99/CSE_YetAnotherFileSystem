@@ -71,10 +71,9 @@ check1(const char *d, const char *f, const char *in)
   errno = 0;
   cc = read(fd, buf, sizeof(buf) - 1);
   if(cc != strlen(in)){
-    fprintf(stderr, "test-lab2-part1-g: read(%s) returned too little %d-%d %s%s\n",
+    fprintf(stderr, "test-lab2-part1-g: read(%s) returned too little %d%s%s\n",
             n,
             cc,
-            strlen(in),
             errno ? ": " : "",
             errno ? strerror(errno) : "");
     exit(1);

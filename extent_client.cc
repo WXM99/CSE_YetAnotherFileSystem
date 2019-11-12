@@ -23,7 +23,6 @@ extent_client::create(uint32_t type, extent_protocol::extentid_t &id)
 {
   extent_protocol::status ret = extent_protocol::OK;
   cached_file_p new_file = (cached_file_p) new cached_file();
-  new_file->created = true;
   new_file->buf_valid = true;
   new_file->attr_valid = true;
   new_file->type = type;
@@ -31,11 +30,11 @@ extent_client::create(uint32_t type, extent_protocol::extentid_t &id)
   new_file->attr.ctime = time(NULL);
   new_file->attr.mtime = time(NULL);
   new_file->attr.type = type;
+  ret = cl->call(extent_protocol::create, type, id);
   if (cache[id] != NULL)
     delete cache[id];
   cache[id] = new_file;
   // Your lab2 part1 code goes here
-  ret = cl->call(extent_protocol::create, type, id);
   return ret;
 }
 
@@ -108,8 +107,8 @@ extent_client::put(extent_protocol::extentid_t eid, std::string buf)
   
   cache[eid] = file;
   // Your lab2 part1 code goes here
-  int r;
-  ret = cl->call(extent_protocol::put, eid, buf,r);
+  // int r;
+  // ret = cl->call(extent_protocol::put, eid, buf,r);
   return ret;
 }
 
@@ -141,6 +140,10 @@ extent_client::sync(extent_protocol::extentid_t eid) {
   }
   file->buf_valid = false;
   file->attr_valid = false;
-  
+  if (file->dirty) {
+    int r;
+    ret = cl->call(extent_protocol::put, eid, file->buf,r);
+    file->dirty = false;
+  }
   return ret;
 }

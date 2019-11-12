@@ -429,6 +429,8 @@ int yfs_client::rmdir(inum parent, const char *name)
         lc->release(parent);
         return NOENT;
     }
+    if ((it->inum)%20 == 0)
+        ec->remove(it->inum);
     dir_entries.erase(it);
     std::string buf;
     for (it = dir_entries.begin(); it != dir_entries.end(); ++it) {

@@ -18,12 +18,10 @@ class extent_client {
     bool buf_valid;
     bool attr_valid;
     bool dirty;
-    bool created;
     cached_file() {
       buf_valid = false;
       attr_valid = false;
       dirty = false;
-      created = false;
     }
   };
   typedef cached_file* cached_file_p; 
