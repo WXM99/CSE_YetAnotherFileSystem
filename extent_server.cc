@@ -34,7 +34,7 @@ int extent_server::put(extent_protocol::extentid_t id, std::string buf, int &)
   return extent_protocol::OK;
 }
 
-int extent_server::get(extent_protocol::extentid_t id, std::string &buf)
+int extent_server::get(extent_protocol::extentid_t id, extent_protocol::full_file& file)
 {
   printf("extent_server: get %lld\n", id);
 
@@ -45,16 +45,21 @@ int extent_server::get(extent_protocol::extentid_t id, std::string &buf)
 
   im->read_file(id, &cbuf, &size);
   if (size == 0)
-    buf = "";
+    file.buf = "";
   else {
-    buf.assign(cbuf, size);
+    file.buf.assign(cbuf, size);
     free(cbuf);
   }
+
+  extent_protocol::attr attr;
+  memset(&attr, 0, sizeof(attr));
+  im->getattr(id, attr);
+  file.attr = attr;
 
   return extent_protocol::OK;
 }
 
-int extent_server::getattr(extent_protocol::extentid_t id, extent_protocol::attr &a)
+int extent_server::getattr(extent_protocol::extentid_t id, extent_protocol::full_file &file)
 {
   printf("extent_server: getattr %lld\n", id);
 
@@ -63,7 +68,17 @@ int extent_server::getattr(extent_protocol::extentid_t id, extent_protocol::attr
   extent_protocol::attr attr;
   memset(&attr, 0, sizeof(attr));
   im->getattr(id, attr);
-  a = attr;
+  file.attr = attr;
+
+  int size = 0;
+  char *cbuf = NULL;
+  im->read_file(id, &cbuf, &size);
+  if (size == 0)
+    file.buf = "";
+  else {
+    file.buf.assign(cbuf, size);
+    free(cbuf);
+  }
 
   return extent_protocol::OK;
 }

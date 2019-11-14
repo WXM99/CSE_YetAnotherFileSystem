@@ -31,6 +31,10 @@ class extent_protocol {
     unsigned int ctime;
     unsigned int size;
   };
+  struct full_file {
+    extent_protocol::attr attr;
+    std::string buf;
+  };
 };
 
 inline unmarshall &
@@ -52,6 +56,30 @@ operator<<(marshall &m, extent_protocol::attr a)
   m << a.mtime;
   m << a.ctime;
   m << a.size;
+  return m;
+}
+
+inline unmarshall &
+operator>>(unmarshall &u, extent_protocol::full_file &f)
+{
+  u >> f.attr.type;
+  u >> f.attr.atime;
+  u >> f.attr.mtime;
+  u >> f.attr.ctime;
+  u >> f.attr.size;
+  u >> f.buf;
+  return u;
+}
+
+inline marshall &
+operator<<(marshall &m, extent_protocol::full_file f)
+{
+  m << f.attr.type;
+  m << f.attr.atime;
+  m << f.attr.mtime;
+  m << f.attr.ctime;
+  m << f.attr.size;
+  m << f.buf;
   return m;
 }
 

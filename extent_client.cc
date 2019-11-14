@@ -53,12 +53,12 @@ extent_client::get(extent_protocol::extentid_t eid, std::string &buf)
   if (file == NULL)
     file = (cached_file_p) new cached_file();
   
-  std::string cache_buf;
-  ret = cl->call(extent_protocol::get, eid, cache_buf);
-  file->buf=cache_buf;
+  extent_protocol::full_file server_file;
+  ret = cl->call(extent_protocol::get, eid, server_file);
+  file->buf = server_file.buf;
   file->buf_valid = true;
-  file->attr.atime = time(NULL);
-
+  file->attr = server_file.attr;
+  file->attr_valid = true;
   cache[eid] = file;
   buf = cache[eid]->buf;
   return ret;
@@ -79,11 +79,12 @@ extent_client::getattr(extent_protocol::extentid_t eid,
   if (file == NULL)
     file = (cached_file_p) new cached_file();
 
-  extent_protocol::attr new_attr;
-  ret = cl->call(extent_protocol::getattr, eid, new_attr);
-  file->attr = new_attr;
+  extent_protocol::full_file server_file;
+  ret = cl->call(extent_protocol::getattr, eid, server_file);
+  file->attr = server_file.attr;
   file->attr_valid = true;
-
+  file->buf = server_file.buf;
+  file->buf_valid = true;
   cache[eid] = file;
   attr = cache[eid]->attr;
   return ret;

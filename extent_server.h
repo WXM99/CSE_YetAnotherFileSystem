@@ -24,8 +24,8 @@ class extent_server {
 
   int create(uint32_t type, extent_protocol::extentid_t &id);
   int put(extent_protocol::extentid_t id, std::string, int &);
-  int get(extent_protocol::extentid_t id, std::string &);
-  int getattr(extent_protocol::extentid_t id, extent_protocol::attr &);
+  int get(extent_protocol::extentid_t id, extent_protocol::full_file &);
+  int getattr(extent_protocol::extentid_t id, extent_protocol::full_file &);
   int remove(extent_protocol::extentid_t id, int &);
 };
 
